@@ -14,7 +14,7 @@ BATCH_RESULTS_JSON_PATH = "data/20241128_batch_results.json"
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 documentcloud_logger = logging.getLogger("documentcloud")
 documentcloud_logger.setLevel(logging.WARNING)
 
