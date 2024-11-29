@@ -3,8 +3,10 @@ import json
 import logging
 import os
 import sys
+import time
 
 from documentcloud.addon import AddOn
+from documentcloud.exceptions import APIError
 import pandas as pd
 
 from ai import get_project_types_from_gpt4, MODEL_NAME
@@ -163,84 +165,94 @@ class AEProjectTypesAddon(AddOn):
             "total": 0,
         }
 
-        # loop
-        for doc in documents:
+        try:
+            # loop
+            for doc in documents:
 
-            project_name = doc.description
-            source_page_url = doc.data["source_page_url"][0]
+                project_name = doc.description
+                source_page_url = doc.data["source_page_url"][0]
 
-            logger.debug(f"Processing doc {doc.title} ({doc.description})")
+                logger.debug(f"Processing doc {doc.title} ({doc.description})")
 
-            # Check corrections first
-            if (
-                project_name in corrections
-                and source_page_url in corrections[project_name]
-            ):
-                logger.debug("Project found in corrections")
+                # Check corrections first
+                if (
+                    project_name in corrections
+                    and source_page_url in corrections[project_name]
+                ):
+                    logger.debug("Project found in corrections")
 
-                if not self.dry_run:
-                    logger.debug(
-                        f"Matched project types: {corrections[project_name][source_page_url]}"
-                    )
-                    doc.data["project_types"] = corrections[project_name][
-                        source_page_url
-                    ]
-                    doc.data["project_types_sources"] = ["human"]
-                    doc.save()
+                    if not self.dry_run:
+                        logger.debug(
+                            f"Matched project types: {corrections[project_name][source_page_url]}"
+                        )
+                        doc.data["project_types"] = corrections[project_name][
+                            source_page_url
+                        ]
+                        doc.data["project_types_sources"] = ["human"]
+                        doc.save()
 
-                    self.processed_count["corrections"] += 1
+                        self.processed_count["corrections"] += 1
 
-            # Then batch results
-            elif project_name in batch_results:
-                logger.debug("Project name found in batch results.")
-                if not self.dry_run:
-                    logger.debug(
-                        f"Matched project types: {batch_results[project_name]}"
-                    )
-                    doc.data["project_types"] = batch_results[project_name]
-                    doc.data["project_types_sources"] = [MODEL_NAME]
-                    doc.save()
-                    self.processed_count["ai_batch"] += 1
-
-            # Then event data
-            elif project_name in self.event_data:
-                logger.debug("Project name found in event data.")
-                if not self.dry_run:
-                    logger.debug(
-                        f"Matched project types: {self.event_data[project_name]['project_types']}"
-                    )
-                    doc.data["project_types"] = self.event_data[project_name][
-                        "project_types"
-                    ]
-                    doc.data["project_types_sources"] = self.event_data[project_name][
-                        "project_types_sources"
-                    ]
-                    doc.save()
-                self.processed_count["event_data"] += 1
-
-            # Get categories from AI
-            else:
-                logger.debug("Project to be categorized on the fly by GPT4")
-                if not self.dry_run:
-                    project_types_from_ai = get_project_types_from_gpt4(project_name)
-
-                    if project_types_from_ai:
-                        logger.debug(f"Matched project types: {project_types_from_ai}")
-                        doc.data["project_types"] = project_types_from_ai
+                # Then batch results
+                elif project_name in batch_results:
+                    logger.debug("Project name found in batch results.")
+                    if not self.dry_run:
+                        logger.debug(
+                            f"Matched project types: {batch_results[project_name]}"
+                        )
+                        doc.data["project_types"] = batch_results[project_name]
                         doc.data["project_types_sources"] = [MODEL_NAME]
                         doc.save()
-                        self.event_data[project_name] = {
-                            "project_types": project_types_from_ai,
-                            "project_types_sources": [MODEL_NAME],
-                        }
-                    else:
-                        doc.data["project_types_failed_sources"] = [MODEL]
+                        self.processed_count["ai_batch"] += 1
 
-                    self.processed_count["ai"] += 1
+                # Then event data
+                elif project_name in self.event_data:
+                    logger.debug("Project name found in event data.")
+                    if not self.dry_run:
+                        logger.debug(
+                            f"Matched project types: {self.event_data[project_name]['project_types']}"
+                        )
+                        doc.data["project_types"] = self.event_data[project_name][
+                            "project_types"
+                        ]
+                        doc.data["project_types_sources"] = self.event_data[
+                            project_name
+                        ]["project_types_sources"]
+                        doc.save()
+                    self.processed_count["event_data"] += 1
 
-            self.check_time_limit()
+                # Get categories from AI
+                else:
+                    logger.debug("Project to be categorized on the fly by GPT4")
+                    if not self.dry_run:
+                        project_types_from_ai = get_project_types_from_gpt4(
+                            project_name
+                        )
 
-        self.close_addon()
+                        if project_types_from_ai:
+                            logger.debug(
+                                f"Matched project types: {project_types_from_ai}"
+                            )
+                            doc.data["project_types"] = project_types_from_ai
+                            doc.data["project_types_sources"] = [MODEL_NAME]
+                            doc.save()
+                            self.event_data[project_name] = {
+                                "project_types": project_types_from_ai,
+                                "project_types_sources": [MODEL_NAME],
+                            }
+                        else:
+                            doc.data["project_types_failed_sources"] = [MODEL]
+
+                        self.processed_count["ai"] += 1
+
+                self.check_time_limit()
+                time.sleep(1)
+
+            self.close_addon()
+
+        except APIError:
+            logger.warning("DocumentCloud API Error, closing...")
+            self.close_addon()
 
 
 if __name__ == "__main__":
