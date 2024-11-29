@@ -246,7 +246,7 @@ class AEProjectTypesAddon(AddOn):
                         self.processed_count["ai"] += 1
 
                 self.check_time_limit()
-                time.sleep(1)
+                time.sleep(0.2)
 
             self.close_addon()
 
