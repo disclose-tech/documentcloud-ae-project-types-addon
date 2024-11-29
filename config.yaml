@@ -6,7 +6,7 @@ documents:
   - query
 properties:
   run_name:
-    title: Run_name
+    title: Run name to show in DocumentCloud's interface
     default: test
     type: string
   project:
@@ -26,3 +26,10 @@ categories:
   - bulk
   - ai
 version: 2
+
+eventOptions:
+  name: run_name
+  events:
+    - hourly
+    - daily
+    - weekly
