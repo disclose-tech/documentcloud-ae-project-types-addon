@@ -55,7 +55,7 @@ class AEProjectTypesAddon(AddOn):
         event_data = self.load_event_data()
         if event_data:
             logger.info(
-                f"Loaded event_data from DocumentCloud ({len(self.event_data)} entries)."
+                f"Loaded event_data from DocumentCloud ({len(event_data)} entries)."
             )
             return event_data
         else:
