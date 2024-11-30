@@ -109,6 +109,7 @@ class AEProjectTypesAddon(AddOn):
             end_message += " - (dry run)"
 
         self.set_message(end_message)
+        logger.info(end_message)
 
     def close_addon(self):
         if not self.dry_run:
