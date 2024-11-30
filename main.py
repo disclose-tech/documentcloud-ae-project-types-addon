@@ -242,7 +242,7 @@ class AEProjectTypesAddon(AddOn):
                                 "project_types_sources": [MODEL_NAME],
                             }
                         else:
-                            doc.data["project_types_failed_sources"] = [MODEL]
+                            doc.data["project_types_failed_sources"] = [MODEL_NAME]
 
                         self.processed_count["ai"] += 1
 
