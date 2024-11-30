@@ -1,9 +1,7 @@
 title: Disclose AE Project Type Addon
 description: Add-On to categorize AE docs by project type.
 type: object
-documents:
-  - selected
-  - query
+documents: []
 properties:
   run_name:
     title: Run name to show in DocumentCloud's interface
