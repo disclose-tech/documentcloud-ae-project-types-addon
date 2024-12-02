@@ -8,6 +8,7 @@ import time
 from documentcloud.addon import AddOn
 from documentcloud.exceptions import APIError
 import pandas as pd
+from tenacity import retry, stop_after_attempt, wait_random_exponential, RetryError
 
 from ai import get_project_types_from_gpt4, MODEL_NAME
 from corrections import corrections
@@ -129,6 +130,13 @@ class AEProjectTypesAddon(AddOn):
                 logger.info(f"Closing due to time limit ({self.time_limit} minutes)")
                 self.close_addon()
 
+    @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(6))
+    def search_documents(self):
+        documents = self.client.documents.search(
+            f'+project:{str(self.project)} -data_project_types:* +status:"success" -data_project_types_failed_sources:"{MODEL_NAME}" sort:-data_publication_datetime'
+        )
+        return documents
+
     def main(self):
 
         # Inputs
@@ -152,10 +160,13 @@ class AEProjectTypesAddon(AddOn):
 
         # Search docs that need to be classified
         logger.info(f"Performing search...")
-        documents = self.client.documents.search(
-            f'+project:{str(self.project)} -data_project_types:* +status:"success" -data_project_types_failed_sources:"{MODEL_NAME}" sort:-data_publication_datetime'
-        )
-        logger.info(f"Found {documents.count} documents to classify.")
+
+        try:
+            documents = self.search_documents()
+            logger.info(f"Found {documents.count} documents to classify.")
+        except RetryError:
+            logger.error("Failed searching DocumentCloud. Closing...")
+            self.close_addon()
 
         # counts
         self.processed_count = {
@@ -198,12 +209,17 @@ class AEProjectTypesAddon(AddOn):
                 elif project_name in batch_results:
                     logger.debug("Project name found in batch results.")
                     if not self.dry_run:
-                        logger.debug(
-                            f"Matched project types: {batch_results[project_name]}"
-                        )
-                        doc.data["project_types"] = batch_results[project_name]
-                        doc.data["project_types_sources"] = [MODEL_NAME]
-                        doc.save()
+
+                        if batch_results[project_name]:
+                            logger.debug(
+                                f"Matched project types: {batch_results[project_name]}"
+                            )
+                            doc.data["project_types"] = batch_results[project_name]
+                            doc.data["project_types_sources"] = [MODEL_NAME]
+                            doc.save()
+                        else:
+                            doc.data["project_types_failed_sources"] = [MODEL_NAME]
+                            doc.save()
                         self.processed_count["ai_batch"] += 1
 
                 # Then event data
@@ -241,13 +257,15 @@ class AEProjectTypesAddon(AddOn):
                                 "project_types": project_types_from_ai,
                                 "project_types_sources": [MODEL_NAME],
                             }
+                            self.store_event_data(self.event_data)
                         else:
                             doc.data["project_types_failed_sources"] = [MODEL_NAME]
+                            doc.save()
 
                         self.processed_count["ai"] += 1
 
                 self.check_time_limit()
-                time.sleep(0.2)
+                time.sleep(0.3)
 
             self.close_addon()
 
