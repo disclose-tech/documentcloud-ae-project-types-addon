@@ -39,5 +39,10 @@ corrections = {
         "https://side.developpement-durable.gouv.fr/PAE/doc/SYRACUSE/875288/prolongation-de-l-implantation-du-mem-a-rennes-35": [
             "Loisirs, sport, tourisme",
         ]
-    }
+    },
+    "Plateforme de messagerie": {
+        "https://side.developpement-durable.gouv.fr/PAE/doc/SYRACUSE/866901/plateforme-de-messagerie": [
+            "Logistique",
+        ]
+    },
 }
