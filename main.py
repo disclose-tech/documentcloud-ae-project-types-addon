@@ -226,17 +226,24 @@ class AEProjectTypesAddon(AddOn):
                 elif project_name in self.event_data:
                     logger.debug("Project name found in event data.")
                     if not self.dry_run:
-                        logger.debug(
-                            f"Matched project types: {self.event_data[project_name]['project_types']}"
-                        )
-                        doc.data["project_types"] = self.event_data[project_name][
+                        if self.event_data[project_name][
                             "project_types"
-                        ]
-                        doc.data["project_types_sources"] = self.event_data[
-                            project_name
-                        ]["project_types_sources"]
+                        ]:  # Project was successfully categorized before
+                            logger.debug(
+                                f"Matched project types: {self.event_data[project_name]['project_types']}"
+                            )
+                            doc.data["project_types"] = self.event_data[project_name][
+                                "project_types"
+                            ]
+                            doc.data["project_types_sources"] = self.event_data[
+                                project_name
+                            ]["project_types_sources"]
+                        else:  # Project is in event data but empty, meaning GPT error
+                            doc.data["project_types_failed_sources"] = self.event_data[
+                                project_name
+                            ]["project_types_sources"]
                         doc.save()
-                    self.processed_count["event_data"] += 1
+                        self.processed_count["event_data"] += 1
 
                 # Get categories from AI
                 else:
@@ -245,23 +252,23 @@ class AEProjectTypesAddon(AddOn):
                         project_types_from_ai = get_project_types_from_gpt4(
                             project_name
                         )
-
+                        # Save to event data first
+                        # NB: Save regardless of empty response, otherwise docs with same projectcould have different types assigned
+                        # if the Add-On fails then succeeds on another doc with the same project name.
+                        self.event_data[project_name] = {
+                            "project_types": project_types_from_ai,
+                            "project_types_sources": [MODEL_NAME],
+                        }
+                        # Tag document
                         if project_types_from_ai:
                             logger.debug(
                                 f"Matched project types: {project_types_from_ai}"
                             )
                             doc.data["project_types"] = project_types_from_ai
                             doc.data["project_types_sources"] = [MODEL_NAME]
-                            doc.save()
-                            self.event_data[project_name] = {
-                                "project_types": project_types_from_ai,
-                                "project_types_sources": [MODEL_NAME],
-                            }
-                            self.store_event_data(self.event_data)
                         else:
-                            doc.data["project_types_failed_sources"] = [MODEL_NAME]
-                            doc.save()
-
+                            doc.data["project_types_failed_sources"] = [MODEL]
+                        doc.save()
                         self.processed_count["ai"] += 1
 
                 self.check_time_limit()
