@@ -259,6 +259,10 @@ class AEProjectTypesAddon(AddOn):
                             "project_types": project_types_from_ai,
                             "project_types_sources": [MODEL_NAME],
                         }
+
+                        # Store event_data
+                        self.store_event_data(self.event_data)
+
                         # Tag document
                         if project_types_from_ai:
                             logger.debug(
