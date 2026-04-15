@@ -139,6 +139,11 @@ class AEProjectTypesAddon(AddOn):
 
     def main(self):
 
+        # User agent
+        self.client.session.headers.update(
+            {"User-Agent": "Disclose AE Project Types Add-On"}
+        )
+
         # Inputs
         self.run_name = self.data.get("run_name", "no name")
         self.time_limit = self.data.get("time_limit", 345)
