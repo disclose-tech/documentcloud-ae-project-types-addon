@@ -7,7 +7,6 @@ import time
 
 from documentcloud.addon import AddOn
 from documentcloud.exceptions import APIError
-import pandas as pd
 from tenacity import retry, stop_after_attempt, wait_random_exponential, RetryError
 
 from ai import get_project_types_from_gpt4, MODEL_NAME
