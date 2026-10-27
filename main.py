@@ -11,8 +11,10 @@ from tenacity import retry, stop_after_attempt, wait_random_exponential, RetryEr
 
 from ai import get_project_types_from_gpt4, MODEL_NAME
 from corrections import corrections
+from event_data_archive import load_archive
 
 BATCH_RESULTS_JSON_PATH = "data/20241128_batch_results.json"
+SAVE_EVERY = 25  # store event data every X GPT calls
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -52,15 +54,32 @@ class AEProjectTypesAddon(AddOn):
 
     def load_or_create_event_data(self):
 
+        self.archived_event_data = load_archive()
+        logger.info(
+            f"Loaded archived event_data ({len(self.archived_event_data)} entries)."
+        )
+
+        self.event_data_changed = False
+        self.unsaved_count = 0
+
         event_data = self.load_event_data()
         if event_data:
             logger.info(
                 f"Loaded event_data from DocumentCloud ({len(event_data)} entries)."
             )
-            return event_data
         else:
             logger.info("No event_data loaded from DocumentCloud.")
             return {}
+
+        # Remove the archived entries, so they are not stored on DocumentCloud anymore
+        archived = [name for name in event_data if name in self.archived_event_data]
+        if archived:
+            for name in archived:
+                del event_data[name]
+            self.event_data_changed = True
+            logger.info(
+                f"Removed {len(archived)} archived entries from event_data ({len(event_data)} left)."
+            )
 
         return event_data
 
@@ -113,7 +132,10 @@ class AEProjectTypesAddon(AddOn):
 
     def close_addon(self):
         if not self.dry_run:
-            self.save_event_data()
+            if self.event_data_changed:
+                self.save_event_data()
+            else:
+                logger.info("No changes to event data, not storing it")
         self.set_end_message()
         sys.exit(0)
 
@@ -226,26 +248,30 @@ class AEProjectTypesAddon(AddOn):
                             doc.save()
                         self.processed_count["ai_batch"] += 1
 
-                # Then event data
-                elif project_name in self.event_data:
+                # Then event data (live or archived)
+                elif (
+                    project_name in self.event_data
+                    or project_name in self.archived_event_data
+                ):
                     logger.debug("Project name found in event data.")
                     if not self.dry_run:
-                        if self.event_data[project_name][
+                        known = self.event_data.get(
+                            project_name
+                        ) or self.archived_event_data.get(project_name)
+                        if known[
                             "project_types"
                         ]:  # Project was successfully categorized before
                             logger.debug(
-                                f"Matched project types: {self.event_data[project_name]['project_types']}"
+                                f"Matched project types: {known['project_types']}"
                             )
-                            doc.data["project_types"] = self.event_data[project_name][
-                                "project_types"
+                            doc.data["project_types"] = known["project_types"]
+                            doc.data["project_types_sources"] = known[
+                                "project_types_sources"
                             ]
-                            doc.data["project_types_sources"] = self.event_data[
-                                project_name
-                            ]["project_types_sources"]
                         else:  # Project is in event data but empty, meaning GPT error
-                            doc.data["project_types_failed_sources"] = self.event_data[
-                                project_name
-                            ]["project_types_sources"]
+                            doc.data["project_types_failed_sources"] = known[
+                                "project_types_sources"
+                            ]
                         doc.save()
                         self.processed_count["event_data"] += 1
 
@@ -264,8 +290,16 @@ class AEProjectTypesAddon(AddOn):
                             "project_types_sources": [MODEL_NAME],
                         }
 
+                        self.event_data_changed = True
+                        self.unsaved_count += 1
+
                         # Store event_data
-                        self.store_event_data(self.event_data)
+                        if self.unsaved_count >= SAVE_EVERY:
+                            self.store_event_data(self.event_data)
+                            self.unsaved_count = 0
+                            logger.info(
+                                f"Event data stored in DocumentCloud ({len(self.event_data)} entries)"
+                            )
 
                         # Tag document
                         if project_types_from_ai:
@@ -275,7 +309,7 @@ class AEProjectTypesAddon(AddOn):
                             doc.data["project_types"] = project_types_from_ai
                             doc.data["project_types_sources"] = [MODEL_NAME]
                         else:
-                            doc.data["project_types_failed_sources"] = [MODEL]
+                            doc.data["project_types_failed_sources"] = [MODEL_NAME]
                         doc.save()
                         self.processed_count["ai"] += 1
 
